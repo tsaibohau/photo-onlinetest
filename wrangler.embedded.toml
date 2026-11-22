@@ -1,0 +1,6 @@
+# 內嵌式部署（所有檔案打包進 Worker 腳本）：npm run deploy:embedded
+# 一般情況請用 wrangler.toml（Static Assets）+ Cloudflare 後台 GitHub 連動。
+name = "photo-onlinetest"
+main = ".worker-embedded/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true

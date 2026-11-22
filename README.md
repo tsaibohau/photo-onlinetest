@@ -19,7 +19,14 @@ npm test           # 單元測試
 npm run build      # 產出 dist/（含 player.html 離線播放器範本）
 ```
 
+🌐 **正式網址**：https://photo-onlinetest.park-3d-nav.workers.dev
+
 ## 部署（GitHub → Cloudflare）
+
+**直接部署（目前使用）**：`CLOUDFLARE_API_TOKEN=… npm run deploy:embedded`
+— 把 `dist/` 全部內嵌進單一 Worker 腳本後上傳（`wrangler.embedded.toml`）。
+
+**GitHub 連動自動部署（建議長期使用）**：
 
 1. Cloudflare 後台 → **Workers & Pages → Create → Import a repository**，選 `photo-onlinetest`。
 2. Build command：`npm run build`；Deploy command：`npx wrangler deploy`（設定已在 `wrangler.toml`）。
