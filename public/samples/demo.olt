@@ -1,0 +1,21 @@
+{
+  "format": "olt",
+  "version": 1,
+  "meta": {
+    "title": "範例測驗：國中自然綜合練習",
+    "subject": "國中自然",
+    "createdAt": "2026-11-22T00:00:00Z",
+    "timeLimitMin": 15,
+    "showAnswerAfterSubmit": true,
+    "multipleScoring": "all"
+  },
+  "questions": [
+    { "id": "q1", "type": "single", "stem": "下列何者是植物進行光合作用的主要胞器？", "options": ["粒線體", "葉綠體", "細胞核", "液胞"], "answer": [1], "points": 10, "explanation": "葉綠體含有葉綠素，能吸收光能進行光合作用。" },
+    { "id": "q2", "type": "single", "stem": "在一大氣壓下，純水的沸點約為多少？", "options": ["0°C", "37°C", "100°C", "212°C"], "answer": [2], "points": 10 },
+    { "id": "q3", "type": "multiple", "stem": "下列哪些動物屬於哺乳類？（可複選）", "options": ["鯨魚", "企鵝", "蝙蝠", "鯊魚", "鴨嘴獸"], "answer": [0, 2, 4], "points": 20 },
+    { "id": "q4", "type": "truefalse", "stem": "聲音可以在真空中傳播。", "options": [], "answer": [1], "points": 10 },
+    { "id": "q5", "type": "truefalse", "stem": "地球自轉一圈約需 24 小時。", "options": [], "answer": [0], "points": 10 },
+    { "id": "q6", "type": "single", "stem": "下列哪一種能源屬於再生能源？", "options": ["煤炭", "天然氣", "太陽能", "石油"], "points": 10 },
+    { "id": "q7", "type": "short", "stem": "請說明為什麼台灣的夏天比冬天熱？（提示：從太陽光的角度思考）", "options": [], "reference": "夏季太陽直射角度較大、照射面積集中，單位面積接收的能量較多，且白晝較長。", "points": 30 }
+  ]
+}
