@@ -46,7 +46,7 @@ export function PhotoTool({ sources, initialIndex = 0, mode, initialRects = [], 
     <div class="modal-backdrop pt-backdrop">
       <div class="pt-modal card">
         <div class="pt-head">
-          <b>{mode === 'mask' ? '🩹 框出附圖（辨識時會跳過）' : '✂️ 框出要截取的附圖'}</b>
+          <b>{mode === 'mask' ? '🩹 框出附圖（辨識時會跳過）' : '✂️ 選取附圖'}</b>
           <div class="spacer" />
           <button class="btn ghost small" onClick={onCancel}>
             ✕
@@ -55,7 +55,7 @@ export function PhotoTool({ sources, initialIndex = 0, mode, initialRects = [], 
         <p class="small muted pt-hint">
           {mode === 'mask'
             ? '用手指或滑鼠拖曳框出圖片、表格等非文字區域，可以框多個；點框右上角的 ✕ 刪除。'
-            : '拖曳框出要放進題目的圖片範圍，重新拖曳可以重框。'}
+            : '上方選一張照片或文件圖片，拖曳框出範圍；整張就是附圖的話直接按「使用整張圖」。'}
         </p>
         {sources.length > 1 && (
           <div class="pt-sources">
@@ -122,6 +122,11 @@ export function PhotoTool({ sources, initialIndex = 0, mode, initialRects = [], 
           <button class="btn" onClick={onCancel}>
             取消
           </button>
+          {mode === 'crop' && (
+            <button class="btn" onClick={() => onDone(idx, [{ x: 0, y: 0, w: 1, h: 1 }])}>
+              使用整張圖
+            </button>
+          )}
           <button class="btn primary" disabled={mode === 'crop' && rects.length === 0} onClick={() => onDone(idx, rects)}>
             {mode === 'mask' ? `重新辨識（跳過 ${rects.length} 個區域）` : '使用這張截圖'}
           </button>

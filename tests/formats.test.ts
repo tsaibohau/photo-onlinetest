@@ -59,3 +59,53 @@ describe('zip-based documents', () => {
     expect((await pagesPreview(z)).pdf).toBeDefined();
   });
 });
+
+import { carveImages, documentImages } from '../src/core/formats';
+describe('embedded images', () => {
+  it('carves png/jpeg and skips tiny ones', () => {
+    const png = new Uint8Array(3000);
+    png.set([0x89, 0x50, 0x4e, 0x47], 0);
+    png.set([0x49, 0x45, 0x4e, 0x44, 0, 0, 0, 0], 2990);
+    const jpg = new Uint8Array(2500);
+    jpg.set([0xff, 0xd8, 0xff], 0);
+    jpg.set([0xff, 0xd9], 2498);
+    const tiny = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 0xff, 0xd9]);
+    const blob = new Uint8Array([1, 2, ...png, 9, ...tiny, ...jpg, 7]);
+    expect(carveImages(blob).map((i) => [i.mime, i.bytes.length])).toEqual([['image/png', 2998], ['image/jpeg', 2500]]);
+  });
+  it('docx media in document order', async () => {
+    const big = (b: number) => new Uint8Array(3000).fill(b);
+    const z = zipSync({ 'word/document.xml': strToU8('<w/>'), 'word/media/image10.png': big(2), 'word/media/image2.jpeg': big(1) });
+    const imgs = await documentImages('docx', z);
+    expect(imgs.map((i) => i.bytes[0])).toEqual([1, 2]);
+  });
+});
+
+import { tableBlock } from '../src/core/formats';
+import { autoNumberParagraphs } from '../src/core/text-parser';
+describe('embedded Word tables', () => {
+  it('renders rows and merges split cells', () => {
+    const raw = '母核種\x07子核種\x07半衰期\x07\x07鈾\x07235\x07（235U）\x07鉛\x07207\x07（207Pb）\x07約\x077億\x07年\x07\x07\r';
+    expect(tableBlock(raw).split('\uE001')).toEqual(['【附表】', '母核種｜子核種｜半衰期', '鈾235（235U）｜鉛207（207Pb）｜約7億年']);
+  });
+  it('attaches a table to the previous question, or to the following group', () => {
+    const T = tableBlock('甲\x07乙\x07\x071\x072\x07\x07');
+    const text = `單選題：(每題2分)
+第一題？(A)a (B)b
+${T}
+第二題？(A)c (B)d
+
+${T}
+附表為資料，回答下列問題
+哪個最大？(A)甲 (B)乙
+哪個最小？(A)甲 (B)乙`;
+    const r = parseQuestionsFromText(text);
+    expect(r.questions).toHaveLength(4);
+    expect(r.questions[0].stem).toBe('第一題？\n【附表】\n甲｜乙\n1｜2');
+    expect(r.questions[0].options).toEqual(['a', 'b']);
+    expect(r.questions[1].stem).toBe('第二題？');
+    expect(r.questions[2].stem).toContain('【題組】附表為資料');
+    expect(r.questions[3].stem).toContain('【附表】\n甲｜乙');
+    expect(autoNumberParagraphs(text)).toContain('4. 【題組】');
+  });
+});

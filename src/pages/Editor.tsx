@@ -15,6 +15,8 @@ import { cropToDataUrl, type SourcePhoto } from '../core/photo';
 import { findSuspicious, removeSuspicious } from '../core/ocr-suspicion';
 import { PhotoTool } from '../components/PhotoTool';
 
+const FIGURE_REF = /附圖|如圖|下圖|右圖|左圖|上圖|圖中|示意圖|附表|下表|如表|右表|表中|剖面圖|曲線/;
+
 function questionSuspicious(q: Question): string[] {
   const all = new Set<string>();
   for (const t of [q.stem, ...(q.type === 'single' || q.type === 'multiple' ? q.options : [])]) findSuspicious(t).forEach((x) => all.add(x));
@@ -132,6 +134,9 @@ function QuestionEditor({
           </button>
         </div>
       )}
+      {!q.image && FIGURE_REF.test(q.stem) && (
+        <div class="small fig-hint">📎 題目提到圖／表，記得加入附圖{sources.length ? '（按「✂️ 選取附圖」）' : ''}</div>
+      )}
       <div class="img-row">
         {q.image ? (
           <>
@@ -144,7 +149,7 @@ function QuestionEditor({
           <>
           {sources.length > 0 && (
             <button class="btn small" onClick={() => setCropping(true)}>
-              ✂️ 從照片截圖
+              ✂️ 選取附圖
             </button>
           )}
           <label class="btn small ghost">

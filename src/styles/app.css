@@ -278,3 +278,10 @@ footer { padding: 1rem 0 2rem; }
 .qedit.flash { animation: flash 0.4s ease-in-out 3; }
 @keyframes flash { 50% { box-shadow: 0 0 0 4px var(--bad); } }
 .qedit.invalid { border-width: 2px; }
+.fig-hint { color: var(--ai); background: var(--ai-soft); padding: 0.3rem 0.7rem; border-radius: 10px; }
+.q-stem .stem-text { white-space: pre-wrap; }
+.stem-table-wrap { overflow-x: auto; margin: 0.6rem 0; }
+.stem-table { border-collapse: collapse; font-size: 0.95rem; min-width: 60%; }
+.stem-table th, .stem-table td { border: 1px solid var(--border); padding: 0.35rem 0.7rem; text-align: center; white-space: nowrap; }
+.stem-table th { background: var(--primary-soft); font-weight: 600; }
+.stem-table tbody tr:nth-child(even) td { background: var(--surface-2); }

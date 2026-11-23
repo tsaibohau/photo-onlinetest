@@ -3,6 +3,7 @@ import { optionLabel, TYPE_LABEL, type Question, type Quiz } from '../core/olt';
 import { isAnswered, type Responses } from '../core/grader';
 import { hashString, shuffled, storageGet, storageSet } from '../core/util';
 import { Results } from './Results';
+import { Stem } from './Stem';
 
 interface Progress {
   order: string[];
@@ -258,7 +259,7 @@ export function Player({ quiz, onExit, onEdit }: PlayerProps) {
               {flagged ? '🚩 已標記' : '🏳 標記待檢查'}
             </button>
           </div>
-          <div class="q-stem">{q.stem}</div>
+          <Stem text={q.stem} />
           {q.image && <img class="q-image" src={q.image} alt={`第 ${idx + 1} 題附圖`} />}
 
           {q.type === 'short' ? (

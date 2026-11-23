@@ -214,3 +214,37 @@ describe('title heuristic', () => {
     expect(parseQuestionsFromText('Unit 5 Vocabulary Quiz\n1. Pick one (A) a (B) b').title).toBe('Unit 5 Vocabulary Quiz');
   });
 });
+
+describe('Word auto-numbered exams (no question numbers in text)', () => {
+  const text = `某某高中 第一次期中考
+高一 地球科學   班級：   座號：
+單選題：(每題2分，共5題)
+太陽系的起源，下列何者正確？(A)甲　(B)乙 (C)丙  (D)丁
+附圖為某地之地質剖面圖，事件順序為何？　(A)甲乙　(B)乙甲　(C)丙丁　(D)丁丙
+
+第2題圖
+若依照距離由近而遠排列，X最可能是下列何者？
+(A)星系團　(B)冥王星　(C)小行星　(D)暗星雲
+
+附表為五顆星體的部分資料。比較五顆星體，回答下列問題：
+哪個天體的表面溫度最高? (A)恆星甲　(B)恆星乙　(C)恆星丙
+哪個天體的距離地球最遠? (A)恆星甲　(B)恆星乙　(C)恆星丙
+
+3／3
+高一地科`;
+  const r = parseQuestionsFromText(text);
+  it('numbers paragraphs, handles groups, captions and footers', () => {
+    expect(r.title).toBe('某某高中 第一次期中考');
+    expect(r.questions).toHaveLength(5);
+    expect(r.questions.every((q) => q.points === 2)).toBe(true);
+    expect(r.questions[2].stem).toContain('X最可能是');
+    expect(r.questions[2].options).toEqual(['星系團', '冥王星', '小行星', '暗星雲']);
+    expect(r.questions[3].stem.startsWith('【題組】附表為五顆星體')).toBe(true);
+    expect(r.questions[4].stem).toContain('【題組】');
+    expect(r.questions[4].options[2]).toBe('恆星丙');
+    expect(r.warnings[0]).toContain('自動編號');
+  });
+  it('strips stray close-paren at option start', () => {
+    expect(parseQuestionsFromText('1. 何者？ (A) 甲 (B) )乙').questions[0].options[1]).toBe('乙');
+  });
+});

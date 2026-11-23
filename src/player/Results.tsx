@@ -3,6 +3,7 @@ import { hasAnswer, optionLabel, TYPE_LABEL, type Question, type Quiz } from '..
 import { gradeQuiz, type Response, type Responses, type Verdict } from '../core/grader';
 import { AI_TARGETS, aiUrl, buildPrompt, PROMPT_MODE_LABEL, type AiTarget, type PromptMode } from '../core/prompt-builder';
 import { copyText, downloadDataUrl, downloadText, safeFileName } from '../core/util';
+import { Stem } from './Stem';
 
 const VERDICT: Record<Verdict, { icon: string; label: string; cls: string }> = {
   correct: { icon: '✓', label: '正確', cls: 'ok' },
@@ -140,7 +141,7 @@ export function Results({ quiz, responses, order, elapsedSec, onRetry, onEdit }:
                   {hasAnswer(q) && `・${r.earned}/${q.points} 分`}
                 </span>
               </div>
-              <div class="q-stem small-stem">{q.stem}</div>
+              <Stem text={q.stem} class="q-stem small-stem" />
               {q.image && <img class="q-image thumb" src={q.image} alt="" />}
               <div class="review-line">
                 <span class="muted">你的答案：</span>

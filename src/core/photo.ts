@@ -16,6 +16,8 @@ export interface SourcePhoto {
   /** 這張照片最近一次 OCR 的文字 */
   text: string;
   masks: Rect[];
+  /** photo = 拍照／圖片（可遮罩重辨識）；docimage = 從 Word 等文件取出的內嵌圖片 */
+  kind?: 'photo' | 'docimage';
 }
 
 export function loadImage(url: string): Promise<HTMLImageElement> {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { parseQuestionsFromText } from '../core/text-parser';
 import { docxToText, ocrImage, OCR_LANGS, pdfToText, type OcrLang } from '../core/importers';
-import { docText, odtText, pagesPreview, pptxText, sniffBytes, UNSUPPORTED_HELP } from '../core/formats';
+import { docText, documentImages, odtText, pagesPreview, pptxText, sniffBytes, UNSUPPORTED_HELP } from '../core/formats';
 import { CONVERSION_PROMPT, parseAiJson, proofreadPrompt } from '../core/ai-import';
 import { maskedCanvas, type Rect, type SourcePhoto } from '../core/photo';
 import { PhotoTool } from '../components/PhotoTool';
@@ -129,6 +129,20 @@ export function Create({ onBack, onImported, appending, sources, onSourcesChange
           }
           default:
             throw new Error(`「${f.name}」是${fmt.label}，目前無法直接讀取。${UNSUPPORTED_HELP}`);
+        }
+        if (['doc', 'docx', 'pptx', 'odt'].includes(fmt.kind)) {
+          const imgs = await documentImages(fmt.kind, bytes);
+          imgs.forEach((im, k) =>
+            added.push({
+              id: `${Date.now()}-${i}-img${k}`,
+              name: `${f.name.replace(/\.[^.]+$/, '')} 圖 ${k + 1}`,
+              url: URL.createObjectURL(new Blob([im.bytes as BlobPart], { type: im.mime })),
+              text: '',
+              masks: [],
+              kind: 'docimage',
+            }),
+          );
+          if (imgs.length) setNotice(`🖼 已從文件取出 ${imgs.length} 張圖片，解析後可在編輯器用「✂️ 選取附圖」放進對應的題目。`);
         }
         if (!out.trim()) throw new Error(`「${f.name}」裡沒有讀到文字。如果是掃描檔或圖片型文件，請改用拍照或截圖上傳。`);
         acc = acc ? `${acc}\n${out}` : out;
@@ -283,13 +297,13 @@ export function Create({ onBack, onImported, appending, sources, onSourcesChange
                 <li>所有辨識都在你的裝置上進行，照片不會被上傳。</li>
               </ul>
             </details>
-            {sources.length > 0 && (
+            {sources.some((s) => s.kind !== 'docimage') && (
               <div class="sources">
                 <p class="small">
                   <b>已上傳的照片</b>：附圖會干擾辨識，可以把圖框起來重新辨識；之後在編輯器也能從這些照片截取附圖。
                 </p>
                 <div class="source-list">
-                  {sources.map((s, i) => (
+                  {sources.map((s, i) => s.kind === 'docimage' ? null : (
                     <div class="source-item" key={s.id}>
                       <img src={s.url} alt={s.name} />
                       <div class="small source-name">{s.name}</div>
@@ -368,7 +382,7 @@ export function Create({ onBack, onImported, appending, sources, onSourcesChange
                 清除
               </button>
               <div class="spacer" />
-              {sources.length > 0 && (
+              {sources.some((s) => s.kind !== 'docimage') && (
                 <button class="btn" disabled={!text.trim() || !!busy} onClick={askAiProofread} title="錯字很多時，讓你的 AI 對照照片校正">
                   🤖 請 AI 校正錯字
                 </button>

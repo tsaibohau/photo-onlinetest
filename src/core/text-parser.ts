@@ -53,6 +53,8 @@ interface Draft {
 }
 
 const SECTION_RE = /^([一二三四五六七八九十]+|[IVX]+)\s*[、.]\s*(.*)$/;
+// 沒有「一、」編號的題型標題，例如「單選題：(每題2分，共50題)」
+const SECTION_KEYWORD_RE = /^(?:第[一二三四五六七八九十]+部分\s*[:：]?\s*)?(?:單一?選擇?|多重?選擇?|複選|是非|選擇|簡答|問答|非選擇|填充|填空|題組|混合)題?\s*(?:[:：(（]|$)/;
 // 行首：可選的作答括號 (B) 或 ( )，接著題號
 const Q_START_RE = /^(?:\(\s*([A-Ea-eOX]{0,5}|[1-5]{0,5})\s*\)\s*)?(?:第\s*)?(\d{1,3})\s*(?:題)?\s*([.、:)]|\s(?=\S))\s*(.*)$/;
 const INLINE_ANS_RE = /(?:^|[\s(\[])(?:答案|解答|正解|答|ans(?:wer)?)\s*[:：]\s*([A-Ea-e](?:\s*[,、]?\s*[A-Ea-e])*|[OX]|對|錯|[1-5](?:\s*[,、]?\s*[1-5])*)\s*[)\]]?\s*$/i;
@@ -222,8 +224,108 @@ function looksLikeTitle(line: string): boolean {
   return cjk === 0 && /^[A-Za-z0-9][A-Za-z0-9 ,.:'&()-]{2,}$/.test(line) && realWords >= 2;
 }
 
+const OPT_START = /^(?:\(\s*[A-Ea-e]\s*\)|[A-E]\s*[.、)])/;
+const HAS_OPT_A = /\(\s*A\s*\)|\(A(?=[\u4e00-\u9fff])/;
+const CAPTION_RE = /^(?:第\s*\d+\s*(?:[-~～]\s*\d+\s*)?題\s*[圖表]\s*)+$/;
+const PAGE_RE = /^(?:第?\s*\d+\s*[／/]\s*\d+\s*頁?|-?\s*\d+\s*-?|第\s*\d+\s*頁(?:\s*[,，]?\s*共\s*\d+\s*頁)?)$/;
+
+/**
+ * Word「自動編號」的考卷，題號不在文字裡：改用「一段一題」的方式補上題號。
+ * - 含 (A) 的段落、或下一段以 (A) 開頭的段落 → 新的一題
+ * - 空行後、緊接在題目前的說明段落 → 題組說明，加到後面每一題的題目前面（直到下一個空行）
+ * - 圖說（第15題圖）、頁碼（3／3）、空行後的零碎短行（頁尾）→ 略過
+ */
+export function autoNumberParagraphs(text: string): string {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let n = 0;
+  let started = false;
+  let group: string | null = null;
+  // 空行後出現的【附表】：屬於後面的題組／題目
+  let pendingTable: string | null = null;
+  // gap：前面是空行、或被略過的圖說／頁碼（用來判斷「空行後」）
+  let gap = true;
+  const isStart = (i: number) => {
+    const l = lines[i]?.trim() ?? '';
+    if (!l || OPT_START.test(l) || SECTION_RE.test(l) || SECTION_KEYWORD_RE.test(l)) return false;
+    if (HAS_OPT_A.test(l)) return true;
+    const next = lines[i + 1]?.trim() ?? '';
+    return OPT_START.test(next);
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    const prevBlank: boolean = gap;
+    gap = false;
+    if (!l) {
+      group = null;
+      gap = true;
+      out.push('');
+      continue;
+    }
+    if ((SECTION_RE.test(l) || SECTION_KEYWORD_RE.test(l)) && l.length <= 40) {
+      started = true;
+      group = null;
+      out.push(l);
+      continue;
+    }
+    if (l.startsWith('【附表】') && started) {
+      if (prevBlank) {
+        pendingTable = l;
+        gap = true;
+      } else out.push(l);
+      continue;
+    }
+    if (isStart(i)) {
+      started = true;
+      n += 1;
+      const ctx = group ? `【題組】${group}\n` : pendingTable ? `${pendingTable}\n` : '';
+      pendingTable = null;
+      out.push(`${n}. ${ctx}${l}`);
+      continue;
+    }
+    if (!started) {
+      out.push(l);
+      continue;
+    }
+    if (CAPTION_RE.test(l.replace(/\s+/g, ' ')) || PAGE_RE.test(l)) {
+      gap = prevBlank; // 略過的行不打斷「空行後」的狀態
+      continue;
+    }
+    if (OPT_START.test(l)) {
+      out.push(l);
+      continue;
+    }
+    if (prevBlank && isStart(i + 1)) {
+      group = pendingTable ? `${l}\n${pendingTable}` : l;
+      pendingTable = null;
+      continue;
+    }
+    if (prevBlank && l.length < 20 && !/[?？]/.test(l)) {
+      gap = true; // 頁尾、零碎標記
+      continue;
+    }
+    out.push(l);
+  }
+  return out.join('\n');
+}
+
 export function parseQuestionsFromText(input: string): ParseResult {
-  const text = repairOcrQuestionStarts(normalizeText(input));
+  const normalized = repairOcrQuestionStarts(normalizeText(input));
+  const first = parseCore(normalized);
+  // 很多段落有 (A) 選項，卻只拆出很少題：多半是 Word 自動編號，改用「一段一題」再試一次
+  const lines = normalized.split('\n').map((l) => l.trim());
+  const candidates = lines.filter((l, i) => l && !OPT_START.test(l) && (HAS_OPT_A.test(l) || OPT_START.test(lines[i + 1] ?? ''))).length;
+  if (candidates >= 2 && first.questions.length < candidates * 0.6) {
+    const second = parseCore(autoNumberParagraphs(normalized));
+    if (second.questions.length > first.questions.length) {
+      second.warnings.unshift(`這份文件的題號沒有出現在文字中（可能是 Word 自動編號），已依段落自動編號為 1～${second.questions.length} 題，請核對題號。`);
+      return second;
+    }
+  }
+  return first;
+}
+
+function parseCore(text: string): ParseResult {
   const lines = text.split('\n');
   const warnings: string[] = [];
   const drafts: Draft[] = [];
@@ -260,7 +362,7 @@ export function parseQuestionsFromText(input: string): ParseResult {
     }
     if (inKey) continue;
 
-    const sec = line.match(SECTION_RE);
+    const sec = line.match(SECTION_RE) ?? (line.length <= 40 && SECTION_KEYWORD_RE.test(line) ? (['', '', line] as unknown as RegExpMatchArray) : null);
     if (sec && (sectionType(sec[2]) || /題/.test(sec[2]))) {
       curSection = sectionType(sec[2]);
       curPoints = sectionPoints(sec[2]);
@@ -295,6 +397,13 @@ export function parseQuestionsFromText(input: string): ParseResult {
 
     if (!cur) {
       if (drafts.length === 0 && !title && line.length <= 40 && looksLikeTitle(line)) title = line;
+      continue;
+    }
+
+    // 表格一律接在題目後面（不是選項的延續）
+    if (line.startsWith('【附表】')) {
+      cur.stem = cur.stem ? `${cur.stem}\n${line}` : line;
+      lastWasOption = false;
       continue;
     }
 
@@ -340,7 +449,7 @@ export function parseQuestionsFromText(input: string): ParseResult {
 
   const questions: Question[] = drafts.map((d) => {
     const ansRaw = d.answerRaw ?? keyMap.get(d.no);
-    const opts = d.options.map((o) => o.replace(/^[\s_|]+|[\s_|]+$/g, ''));
+    const opts = d.options.map((o) => o.replace(/^[\s_|)）]+|[\s_|]+$/g, ''));
     let type: QuestionType;
     let options: string[] = opts;
     let answer: number[] | undefined;
@@ -362,6 +471,7 @@ export function parseQuestionsFromText(input: string): ParseResult {
       if (opts.length === 1) d.stem += ` (A)${opts[0]}`;
       options = [];
     }
+    d.stem = d.stem.replace(/\uE001/g, '\n');
     const stem = d.stem.replace(/^[(（]\s*(多選|複選|是非|單選)(題)?\s*[)）]\s*/, '').trim();
     if (!stem) warnings.push(`第 ${d.no} 題沒有辨識到題目內容，請手動補上。`);
     if ((type === 'single' || type === 'multiple') && options.some((o) => !o))
