@@ -175,3 +175,42 @@ describe('lost option A guard', () => {
     expect(r.questions[0].stem).toBe('何者對？ (B) 甲 (C) 乙');
   });
 });
+
+import { findSuspicious, removeSuspicious } from '../src/core/ocr-suspicion';
+import { proofreadPrompt } from '../src/core/ai-import';
+describe('ocr suspicion', () => {
+  it('flags junk latin words and symbols in Chinese text, allows common abbreviations', () => {
+    expect(findSuspicious('REE BREMPEIBORL HETR? 此斷層的 DNA 與 NaCl')).toEqual(['REE', 'BREMPEIBORL', 'HETR']);
+    expect(findSuspicious('© WEBER')).toEqual(['©']);
+    expect(findSuspicious('板塊擠壓的方向 =a : 7 | 測')).toContain('|');
+    expect(findSuspicious('Which planet is the largest?')).toEqual([]);
+  });
+  it('removes tokens', () => {
+    expect(removeSuspicious('REE BREMPEIBORL HETR? 何者正確？', ['REE', 'BREMPEIBORL', 'HETR'])).toBe('?何者正確？');
+  });
+  it('proofread prompt embeds text', () => {
+    expect(proofreadPrompt('1. 板直')).toContain('【OCR 辨識文字】\n1. 板直');
+  });
+});
+
+describe('real OCR output after masking figures', () => {
+  const ocr = readFileSync(new URL('./fixtures/ocr-earth-science-masked.txt', import.meta.url), 'utf8');
+  const r = parseQuestionsFromText(ocr);
+  it('recovers questions even when question 1 number is lost', () => {
+    expect(r.questions).toHaveLength(10);
+    expect(r.questions[0].stem).toContain('構造學說');
+    expect(r.questions.filter((q) => q.options.length >= 2)).toHaveLength(9);
+    expect(r.questions[5].stem.startsWith('承上題')).toBe(true);
+    expect(r.title).toBeUndefined();
+    const q3 = r.questions.find((q) => q.stem.includes('交界'))!;
+    expect(q3.options).toEqual(['臺灣', '喜馬拉雅山', '美國舊金山', '智利', '日本。']);
+  });
+});
+
+describe('title heuristic', () => {
+  it('accepts real titles, rejects score boxes and noise', () => {
+    expect(parseQuestionsFromText('得分\n1. 題目 (A) 1 (B) 2').title).toBeUndefined();
+    expect(parseQuestionsFromText('CH3 變動的固體地球\n1. 題目 (A) 1 (B) 2').title).toBe('CH3 變動的固體地球');
+    expect(parseQuestionsFromText('Unit 5 Vocabulary Quiz\n1. Pick one (A) a (B) b').title).toBe('Unit 5 Vocabulary Quiz');
+  });
+});

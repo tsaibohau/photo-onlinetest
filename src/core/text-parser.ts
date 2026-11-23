@@ -87,7 +87,7 @@ interface Candidate extends Marker {
 }
 
 // OCR 常見誤認：(8)=B、(4=A、COD)/(0)=D、右括號遺失「(CP 波」=(C)P
-const FUZZY_RE = /\(\s*8\s*\)|\(4(?=\s)|(?:\bCO|\()[D0O]\)|\(([A-E])(?=[A-Za-z一-鿿])/g;
+const FUZZY_RE = /\(\s*8\s*\)|\(4(?=\s)|(?:\bCO|\bC|\()[D0O]\)|\(([A-E])(?=[A-Za-z一-鿿]|\s*$)/g;
 
 /** 找出一行中的選項標記，必須依序（從 expectStart 開始連號）才算數 */
 function findOptionMarkers(
@@ -137,18 +137,20 @@ function findOptionMarkers(
       allowLostA &&
       want === 0 &&
       out.length === 0 &&
-      c.idx === 1 &&
+      (c.idx === 1 || (c.idx === 2 && !c.fuzzy)) &&
       !c.numeric &&
       numericMode !== true &&
       line.slice(0, c.pos).trim().length > 0 &&
-      line.slice(0, c.pos).trim().length <= 12
+      line.slice(0, c.pos).trim().length <= (c.idx === 1 ? 12 : 40)
     ) {
-      // 行首的 (A) 被 OCR 吃掉（如「AER (8) 喜馬拉雅山」）：把 (B) 前面的短文字當作選項 A
+      // 行首的 (A)/(B) 被 OCR 吃掉（如「AER (8) 喜馬拉雅山」）：前面的文字當作緊鄰的上一個選項，
+      // 更前面遺失的選項留空白讓使用者補
       mode = false;
-      out.push({ pos: 0, end: 0, idx: 0, numeric: false });
+      for (let k = 0; k < c.idx - 1; k++) out.push({ pos: 0, end: 0, idx: k, numeric: false });
+      out.push({ pos: 0, end: 0, idx: c.idx - 1, numeric: false });
       out.push(c);
-      want = 2;
-    } else if (!c.fuzzy && !c.numeric && mode === false && c.idx === want + 1 && out.length > 0) {
+      want = c.idx + 1;
+    } else if (!c.numeric && mode === false && c.idx === want + 1 && (out.length > 0 || expectStart > 0)) {
       // 中間漏認一個選項（例如 (C) 被 OCR 吃掉）：補一個空白選項，讓使用者在編輯器補上
       out.push({ pos: c.pos, end: c.pos, idx: want, numeric: false });
       out.push(c);
@@ -180,11 +182,17 @@ export function repairOcrQuestionStarts(text: string): string {
       if (j) {
         const n = Number([...j[1]].map((c) => DIGITISH[c] ?? c).join(''));
         const strict = /^C/.test(line);
-        if (n === last + 1 || (!strict && n > last && n - last <= 2)) {
+        if (n === last + 1 || (last === 0 && n <= 3) || (!strict && n > last && n - last <= 2)) {
           last = n;
           return `( ) ${n}. ${j[2]}`;
         }
         return line;
+      }
+      // 題號完全認不出（如「《 7 上根折板塊…？ (A)…」）：開頭是括號類雜訊、且同一行有問號與 (A)
+      const lost = line.match(/^[《〈(（C\[]\s*[^\u4e00-\u9fff]{0,4}(?=[\u4e00-\u9fff])(.*[?？].*\(\s*A\s*\).*)$/);
+      if (lost && !/^\(\s*[A-E]\s*\)/.test(line)) {
+        last += 1;
+        return `( ) ${last}. ${lost[1]}`;
       }
       const k = line.match(JUNK_NONUM_RE);
       if (k) {
@@ -203,6 +211,15 @@ function lettersToIdx(raw: string, numeric: boolean): number[] {
     else if (/[1-6]/.test(ch) && numeric) res.push(Number(ch) - 1);
   }
   return [...new Set(res)].sort((a, b) => a - b);
+}
+
+/** 標題要像樣：至少 4 個中文字（或 3 個英文單字），且大部分是正常文字（排除「得分」、OCR 雜訊） */
+function looksLikeTitle(line: string): boolean {
+  const cjk = line.match(/[\u4e00-\u9fff]/g)?.length ?? 0;
+  const visible = line.replace(/\s/g, '').length;
+  if (cjk >= 4) return cjk / visible >= 0.6;
+  const realWords = line.split(/\s+/).filter((w) => /^[A-Za-z]{3,}$/.test(w) && /[aeiouAEIOU]/.test(w)).length;
+  return cjk === 0 && /^[A-Za-z0-9][A-Za-z0-9 ,.:'&()-]{2,}$/.test(line) && realWords >= 2;
 }
 
 export function parseQuestionsFromText(input: string): ParseResult {
@@ -275,7 +292,7 @@ export function parseQuestionsFromText(input: string): ParseResult {
     }
 
     if (!cur) {
-      if (drafts.length === 0 && !title && line.length <= 40) title = line;
+      if (drafts.length === 0 && !title && line.length <= 40 && looksLikeTitle(line)) title = line;
       continue;
     }
 

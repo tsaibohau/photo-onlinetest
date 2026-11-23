@@ -6,6 +6,7 @@ import { Home } from './pages/Home';
 import { Create } from './pages/Create';
 import { Editor } from './pages/Editor';
 import { Player } from './player/Player';
+import type { SourcePhoto } from './core/photo';
 
 type View = 'home' | 'create' | 'edit' | 'play';
 const DRAFT_KEY = 'olt-draft';
@@ -36,6 +37,8 @@ export function App({ launchFile }: { launchFile?: Promise<File | null> }) {
   const [fromEditor, setFromEditor] = useState(false);
   const [install, setInstall] = useState<BeforeInstallPromptEvent | null>(null);
   const [fromCreateAppend, setAppend] = useState(false);
+  // 上傳的原始照片只存在記憶體（重新整理後就沒了），供遮罩重辨識與截圖附圖使用
+  const [sources, setSources] = useState<SourcePhoto[]>([]);
 
   const setView = (v: View) => {
     if (v !== view) {
@@ -109,7 +112,10 @@ export function App({ launchFile }: { launchFile?: Promise<File | null> }) {
   if (view === 'create')
     return (
       <div class="app">
-        <Create onBack={() => setView(fromCreateAppend ? 'edit' : 'home')} onImported={onImported} appending={fromCreateAppend && !!draft} />
+        <Create onBack={() => setView(fromCreateAppend ? 'edit' : 'home')} onImported={onImported} appending={fromCreateAppend && !!draft}
+          sources={sources}
+          onSourcesChange={setSources}
+        />
       </div>
     );
 
@@ -122,6 +128,7 @@ export function App({ launchFile }: { launchFile?: Promise<File | null> }) {
           warnings={warnings}
           onPlay={(q) => play(q, true)}
           onBack={() => setView('home')}
+          sources={sources}
           onAddMore={() => {
             setAppend(true);
             setView('create');
@@ -149,6 +156,8 @@ export function App({ launchFile }: { launchFile?: Promise<File | null> }) {
       <Home
         onCreate={() => {
           setAppend(false);
+          sources.forEach((s) => URL.revokeObjectURL(s.url));
+          setSources([]);
           setView('create');
         }}
         onOpenFile={openFile}

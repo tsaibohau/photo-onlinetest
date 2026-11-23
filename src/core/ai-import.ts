@@ -39,3 +39,15 @@ export function parseAiJson(text: string): Quiz {
   if (Array.isArray(raw)) raw = { ...newQuiz(), questions: raw };
   return validateQuiz(raw);
 }
+
+/** OCR 文字錯字多時，請使用者自己的 AI 校正並直接轉成 JSON */
+export function proofreadPrompt(ocrText: string): string {
+  return `下面是用 OCR 從考卷照片辨識出來的文字，裡面有不少錯字、亂碼與漏字（例如「板直」應為「板塊」、作答括號被認成 CL / C02 之類）。
+如果我有附上考卷照片，請以照片為準；沒有照片就依上下文合理校正。
+
+${CONVERSION_PROMPT}
+
+【OCR 辨識文字】
+${ocrText.trim()}
+`;
+}

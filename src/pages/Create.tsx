@@ -1,7 +1,9 @@
 import { useState } from 'preact/hooks';
 import { parseQuestionsFromText } from '../core/text-parser';
 import { docxToText, fileKind, ocrImage, OCR_LANGS, pdfToText, type OcrLang } from '../core/importers';
-import { CONVERSION_PROMPT, parseAiJson } from '../core/ai-import';
+import { CONVERSION_PROMPT, parseAiJson, proofreadPrompt } from '../core/ai-import';
+import { maskedCanvas, type Rect, type SourcePhoto } from '../core/photo';
+import { PhotoTool } from '../components/PhotoTool';
 import { parseOlt, type Question, type Quiz } from '../core/olt';
 import { copyText, storageGet, storageSet } from '../core/util';
 
@@ -10,6 +12,9 @@ interface Props {
   /** 匯入完成：題目 + 可能的標題 + 警告 */
   onImported: (questions: Question[], title: string | undefined, warnings: string[], meta?: Quiz['meta']) => void;
   appending: boolean;
+  /** 上傳過的照片（之後在編輯器可以截圖當附圖） */
+  sources: SourcePhoto[];
+  onSourcesChange: (s: SourcePhoto[]) => void;
 }
 
 type Tab = 'scan' | 'paste' | 'ai';
@@ -28,7 +33,7 @@ const SAMPLE_TEXT = `國二自然 期中練習
 四、簡答題（每題 5 分）
 5. 請說明為什麼夏天比冬天熱。`;
 
-export function Create({ onBack, onImported, appending }: Props) {
+export function Create({ onBack, onImported, appending, sources, onSourcesChange }: Props) {
   const [tab, setTab] = useState<Tab>('scan');
   const [text, setText] = useState('');
   const [lang, setLang] = useState<OcrLang>(() => storageGet<OcrLang>('olt-ocr-lang') ?? 'chi_tra+eng');
@@ -37,12 +42,15 @@ export function Create({ onBack, onImported, appending }: Props) {
   const [aiText, setAiText] = useState('');
   const [copied, setCopied] = useState(false);
   const [drag, setDrag] = useState(false);
+  const [masking, setMasking] = useState<number | null>(null);
+  const [notice, setNotice] = useState('');
 
   const handleFiles = async (files: FileList | File[] | null) => {
     if (!files || !files.length) return;
     setError('');
     const list = [...files];
     let acc = text;
+    const added: SourcePhoto[] = [];
     try {
       for (let i = 0; i < list.length; i++) {
         const f = list[i];
@@ -56,7 +64,10 @@ export function Create({ onBack, onImported, appending }: Props) {
           setBusy(null);
           onImported(quiz.questions, quiz.meta.title, [], quiz.meta);
           return;
-        } else if (kind === 'image') out = await ocrImage(f, lang, progress);
+        } else if (kind === 'image') {
+          out = await ocrImage(f, lang, progress);
+          added.push({ id: `${Date.now()}-${i}`, name: f.name || `照片 ${sources.length + added.length + 1}`, url: URL.createObjectURL(f), text: out, masks: [] });
+        }
         else if (kind === 'pdf') out = await pdfToText(f, lang, progress);
         else if (kind === 'docx') out = await docxToText(f, progress);
         else if (kind === 'text') out = await f.text();
@@ -69,7 +80,40 @@ export function Create({ onBack, onImported, appending }: Props) {
       setError(/fetch|network|load/i.test(msg) ? `${msg}（OCR 第一次使用需要網路下載辨識模型）` : msg);
     } finally {
       setBusy(null);
+      if (added.length) onSourcesChange([...sources, ...added]);
     }
+  };
+
+  const remask = async (i: number, rects: Rect[]) => {
+    setMasking(null);
+    const src = sources[i];
+    setError('');
+    try {
+      const canvas = await maskedCanvas(src.url, rects);
+      const out = await ocrImage(canvas, lang, (msg, ratio) => setBusy({ msg: `重新辨識「${src.name}」：${msg}`, ratio }));
+      onSourcesChange(sources.map((s, j) => (j === i ? { ...s, text: out, masks: rects } : s)));
+      if (src.text && text.includes(src.text)) {
+        setText(text.replace(src.text, out));
+        setNotice('✅ 已用遮蓋後的照片重新辨識，並替換原本的辨識結果。');
+      } else {
+        setText(text ? `${text}\n${out}` : out);
+        setNotice('ℹ️ 你修改過辨識文字，新的結果已附加在最後面，請刪除重複的部分。');
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const askAiProofread = async () => {
+    const ok = await copyText(proofreadPrompt(text));
+    setTab('ai');
+    setNotice(
+      ok
+        ? '📋 已複製「校正錯字」提示詞！貼給你的 AI（建議同時上傳考卷照片），再把 AI 回覆的 JSON 貼到下面。'
+        : '⚠️ 複製失敗，請改用下方「複製轉檔提示詞」。',
+    );
   };
 
   const parse = () => {
@@ -174,6 +218,24 @@ export function Create({ onBack, onImported, appending }: Props) {
                 <li>所有辨識都在你的裝置上進行，照片不會被上傳。</li>
               </ul>
             </details>
+            {sources.length > 0 && (
+              <div class="sources">
+                <p class="small">
+                  <b>已上傳的照片</b>：附圖會干擾辨識，可以把圖框起來重新辨識；之後在編輯器也能從這些照片截取附圖。
+                </p>
+                <div class="source-list">
+                  {sources.map((s, i) => (
+                    <div class="source-item" key={s.id}>
+                      <img src={s.url} alt={s.name} />
+                      <div class="small source-name">{s.name}</div>
+                      <button class="btn small" disabled={!!busy} onClick={() => setMasking(i)}>
+                        🩹 遮住附圖再辨識{s.masks.length ? `（${s.masks.length}）` : ''}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -230,6 +292,7 @@ export function Create({ onBack, onImported, appending }: Props) {
           </div>
         )}
         {error && <div class="alert bad">⚠️ {error}</div>}
+        {notice && <div class="alert info">{notice}</div>}
 
         {tab !== 'ai' && (text || tab === 'paste') && (
           <div class="raw-text">
@@ -240,6 +303,11 @@ export function Create({ onBack, onImported, appending }: Props) {
                 清除
               </button>
               <div class="spacer" />
+              {sources.length > 0 && (
+                <button class="btn" disabled={!text.trim() || !!busy} onClick={askAiProofread} title="錯字很多時，讓你的 AI 對照照片校正">
+                  🤖 請 AI 校正錯字
+                </button>
+              )}
               <button class="btn primary big" disabled={!text.trim() || !!busy} onClick={parse}>
                 解析成題目 →
               </button>
@@ -256,6 +324,16 @@ export function Create({ onBack, onImported, appending }: Props) {
           </p>
         )}
       </section>
+      {masking !== null && sources[masking] && (
+        <PhotoTool
+          sources={sources}
+          initialIndex={masking}
+          mode="mask"
+          initialRects={sources[masking].masks}
+          onCancel={() => setMasking(null)}
+          onDone={(i, rects) => remask(i, rects)}
+        />
+      )}
     </main>
   );
 }

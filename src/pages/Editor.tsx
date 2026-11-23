@@ -11,6 +11,15 @@ import {
 } from '../core/olt';
 import { imageToDataUrl } from '../core/importers';
 import { downloadOlt, downloadStandalone } from '../core/export';
+import { cropToDataUrl, type SourcePhoto } from '../core/photo';
+import { findSuspicious, removeSuspicious } from '../core/ocr-suspicion';
+import { PhotoTool } from '../components/PhotoTool';
+
+function questionSuspicious(q: Question): string[] {
+  const all = new Set<string>();
+  for (const t of [q.stem, ...(q.type === 'single' || q.type === 'multiple' ? q.options : [])]) findSuspicious(t).forEach((x) => all.add(x));
+  return [...all];
+}
 
 interface Props {
   quiz: Quiz;
@@ -19,6 +28,7 @@ interface Props {
   onPlay: (q: Quiz) => void;
   onBack: () => void;
   onAddMore: () => void;
+  sources: SourcePhoto[];
 }
 
 function changeType(q: Question, type: QuestionType): Question {
@@ -44,6 +54,7 @@ function QuestionEditor({
   onChange,
   onRemove,
   onMove,
+  sources,
 }: {
   q: Question;
   index: number;
@@ -51,8 +62,16 @@ function QuestionEditor({
   onChange: (q: Question) => void;
   onRemove: () => void;
   onMove: (d: number) => void;
+  sources: SourcePhoto[];
 }) {
   const set = (patch: Partial<Question>) => onChange({ ...q, ...patch });
+  const [cropping, setCropping] = useState(false);
+  const suspicious = questionSuspicious(q);
+  const clean = () =>
+    set({
+      stem: removeSuspicious(q.stem, suspicious),
+      options: q.type === 'single' || q.type === 'multiple' ? q.options.map((o) => removeSuspicious(o, suspicious)) : q.options,
+    });
   const toggleAns = (i: number) => {
     const cur = q.answer ?? [];
     if (q.type === 'multiple') set({ answer: cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort((a, b) => a - b) });
@@ -62,7 +81,7 @@ function QuestionEditor({
     !q.stem.trim() || ((q.type === 'single' || q.type === 'multiple') && q.options.filter((o) => o.trim()).length < 2);
 
   return (
-    <div class={`card qedit ${missing ? 'invalid' : ''}`}>
+    <div id={`q-${q.id}`} class={`card qedit ${missing ? 'invalid' : ''}`}>
       <div class="qedit-head">
         <b class="qnum">{index + 1}</b>
         <select value={q.type} onChange={(e) => onChange(changeType(q, (e.target as HTMLSelectElement).value as QuestionType))}>
@@ -100,6 +119,19 @@ function QuestionEditor({
         value={q.stem}
         onInput={(e) => set({ stem: (e.target as HTMLTextAreaElement).value })}
       />
+      {suspicious.length > 0 && (
+        <div class="suspect">
+          <span class="small">
+            ⚠️ 可能有辨識錯誤：
+            {suspicious.slice(0, 8).map((t) => (
+              <code key={t}>{t}</code>
+            ))}
+          </span>
+          <button class="btn small" onClick={clean} title="把這些片段從題目與選項中刪除">
+            🧹 清除這些雜訊
+          </button>
+        </div>
+      )}
       <div class="img-row">
         {q.image ? (
           <>
@@ -109,8 +141,14 @@ function QuestionEditor({
             </button>
           </>
         ) : (
+          <>
+          {sources.length > 0 && (
+            <button class="btn small" onClick={() => setCropping(true)}>
+              ✂️ 從照片截圖
+            </button>
+          )}
           <label class="btn small ghost">
-            🖼 加入附圖
+            🖼 上傳附圖
             <input
               type="file"
               accept="image/*"
@@ -121,8 +159,20 @@ function QuestionEditor({
               }}
             />
           </label>
+          </>
         )}
       </div>
+      {cropping && (
+        <PhotoTool
+          sources={sources}
+          mode="crop"
+          onCancel={() => setCropping(false)}
+          onDone={async (i, rects) => {
+            setCropping(false);
+            if (rects[0]) set({ image: await cropToDataUrl(sources[i].url, rects[0]) });
+          }}
+        />
+      )}
 
       {(q.type === 'single' || q.type === 'multiple') && (
         <div class="opt-edit">
@@ -197,7 +247,7 @@ function QuestionEditor({
   );
 }
 
-export function Editor({ quiz, onChange, warnings, onPlay, onBack, onAddMore }: Props) {
+export function Editor({ quiz, onChange, warnings, onPlay, onBack, onAddMore, sources }: Props) {
   const [hideAnswers, setHideAnswers] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -206,6 +256,23 @@ export function Editor({ quiz, onChange, warnings, onPlay, onBack, onAddMore }: 
   const setQ = (qs: Question[]) => onChange({ ...quiz, questions: qs });
 
   const check = (): Quiz | null => {
+    // 先找出第一個不完整的題目，直接捲過去讓使用者修
+    const bad = quiz.questions.findIndex(
+      (q) => !q.stem.trim() || ((q.type === 'single' || q.type === 'multiple') && q.options.filter((o) => o.trim()).length < 2),
+    );
+    if (bad >= 0) {
+      const q = quiz.questions[bad];
+      setError(
+        !q.stem.trim()
+          ? `第 ${bad + 1} 題沒有題目內容，請補上（或刪除這題）。`
+          : `第 ${bad + 1} 題的選項不足 2 個，請補上選項，或把題型改成簡答題。`,
+      );
+      const el = document.getElementById(`q-${q.id}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.classList.add('flash');
+      setTimeout(() => el?.classList.remove('flash'), 1600);
+      return null;
+    }
     try {
       const qs = quiz.questions.map((q) =>
         q.type === 'single' || q.type === 'multiple'
@@ -230,6 +297,7 @@ export function Editor({ quiz, onChange, warnings, onPlay, onBack, onAddMore }: 
 
   const total = quiz.questions.reduce((s, q) => s + q.points, 0);
   const noKey = quiz.questions.filter((q) => q.type !== 'short' && !(q.answer && q.answer.length)).length;
+  const suspectCount = quiz.questions.filter((q) => questionSuspicious(q).length > 0).length;
 
   return (
     <main class="container editor">
@@ -300,6 +368,7 @@ export function Editor({ quiz, onChange, warnings, onPlay, onBack, onAddMore }: 
         <p class="small muted">
           共 {quiz.questions.length} 題・總分 {total}
           {noKey > 0 && `・${noKey} 題尚未設定答案（交卷後由 AI 解題）`}
+          {suspectCount > 0 && <span class="warn">・{suspectCount} 題可能有辨識錯誤（標示 ⚠️）</span>}
         </p>
       </section>
 
@@ -311,6 +380,7 @@ export function Editor({ quiz, onChange, warnings, onPlay, onBack, onAddMore }: 
           total={quiz.questions.length}
           onChange={(nq) => setQ(quiz.questions.map((x) => (x.id === q.id ? nq : x)))}
           onRemove={() => setQ(quiz.questions.filter((x) => x.id !== q.id))}
+          sources={sources}
           onMove={(d) => {
             const qs = [...quiz.questions];
             [qs[i], qs[i + d]] = [qs[i + d], qs[i]];
