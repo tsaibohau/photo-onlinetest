@@ -7,6 +7,7 @@ import { Create } from './pages/Create';
 import { Editor } from './pages/Editor';
 import { Player } from './player/Player';
 import type { SourcePhoto } from './core/photo';
+import { sniffBytes } from './core/formats';
 
 type View = 'home' | 'create' | 'edit' | 'play';
 const DRAFT_KEY = 'olt-draft';
@@ -39,6 +40,7 @@ export function App({ launchFile }: { launchFile?: Promise<File | null> }) {
   const [fromCreateAppend, setAppend] = useState(false);
   // 上傳的原始照片只存在記憶體（重新整理後就沒了），供遮罩重辨識與截圖附圖使用
   const [sources, setSources] = useState<SourcePhoto[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[] | undefined>();
 
   const setView = (v: View) => {
     if (v !== view) {
@@ -78,8 +80,17 @@ export function App({ launchFile }: { launchFile?: Promise<File | null> }) {
   const openFile = async (f: File) => {
     setError('');
     try {
-      const text = await f.text();
-      play(f.name.toLowerCase().endsWith('.json') ? parseAiJson(text) : parseOlt(text));
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const fmt = await sniffBytes(bytes, f.name);
+      if (fmt.kind !== 'olt' && fmt.kind !== 'json') {
+        // 不是測驗檔（例如考卷的 Word / PDF / 照片）：直接帶去「建立測驗」辨識
+        setAppend(false);
+        setPendingFiles([f]);
+        setView('create');
+        return;
+      }
+      const text = new TextDecoder().decode(bytes);
+      play(fmt.kind === 'json' ? parseAiJson(text) : parseOlt(text));
     } catch (e) {
       setError(`無法開啟「${f.name}」：${(e as Error).message}`);
       setView('home');
@@ -115,6 +126,8 @@ export function App({ launchFile }: { launchFile?: Promise<File | null> }) {
         <Create onBack={() => setView(fromCreateAppend ? 'edit' : 'home')} onImported={onImported} appending={fromCreateAppend && !!draft}
           sources={sources}
           onSourcesChange={setSources}
+          pendingFiles={pendingFiles}
+          onPendingDone={() => setPendingFiles(undefined)}
         />
       </div>
     );

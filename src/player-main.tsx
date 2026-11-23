@@ -29,7 +29,6 @@ function Standalone() {
             選擇 .olt 檔案
             <input
               type="file"
-              accept=".olt,.json"
               hidden
               onChange={async (e) => {
                 const f = (e.target as HTMLInputElement).files?.[0];

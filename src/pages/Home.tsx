@@ -51,10 +51,9 @@ export function Home({ onCreate, onOpenFile, onSample, draft, onResumeDraft, err
         <label class="card action-card">
           <div class="ac-icon">📂</div>
           <h2>開啟 .olt 測驗</h2>
-          <p class="muted">選擇或拖曳 .olt 檔案到這裡，立刻開始作答</p>
+          <p class="muted">選擇或拖曳 .olt 檔案到這裡，立刻開始作答（選到考卷檔也會自動幫你辨識）</p>
           <input
             type="file"
-            accept=".olt,.json,application/json"
             hidden
             onChange={(e) => {
               const f = (e.target as HTMLInputElement).files?.[0];

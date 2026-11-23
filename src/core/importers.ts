@@ -183,17 +183,6 @@ export async function docxToText(file: Blob, onProgress: Progress): Promise<stri
   return res.value;
 }
 
-export function fileKind(file: File): 'olt' | 'image' | 'pdf' | 'docx' | 'text' | 'json' | 'unknown' {
-  const name = file.name.toLowerCase();
-  if (name.endsWith('.olt') || name.endsWith('.olt.json')) return 'olt';
-  if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|heic|bmp|gif)$/.test(name)) return 'image';
-  if (file.type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
-  if (name.endsWith('.docx')) return 'docx';
-  if (name.endsWith('.json')) return 'json';
-  if (file.type.startsWith('text/') || /\.(txt|md|csv)$/.test(name)) return 'text';
-  return 'unknown';
-}
-
 /** 把圖片壓縮成 data URL（用於題目附圖） */
 export async function imageToDataUrl(file: Blob, maxSide = 1200): Promise<string> {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions);

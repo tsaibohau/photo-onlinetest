@@ -249,8 +249,10 @@ export function parseQuestionsFromText(input: string): ParseResult {
       continue;
     }
     // 答案表：一行有 2 組以上「題號+答案」且沒有其他文字
-    const pairs = [...line.matchAll(KEY_PAIR_RE)];
-    const leftover = line.replace(KEY_PAIR_RE, '').replace(/[\s,，、;；|]/g, '');
+    // 「答案：1.D 2.C 3.B」：先拿掉標籤再判斷
+    const keyBody = line.replace(/^(?:答案|解答|參考答案|answers?|answer\s*key)\s*[:：]?\s*/i, '');
+    const pairs = [...keyBody.matchAll(KEY_PAIR_RE)];
+    const leftover = keyBody.replace(KEY_PAIR_RE, '').replace(/[\s,，、;；|]/g, '');
     if ((inKey && pairs.length >= 1 && leftover.length <= 2) || (pairs.length >= 2 && leftover.length === 0)) {
       pairs.forEach((p) => keyMap.set(Number(p[1]), p[2]));
       cur = null;
