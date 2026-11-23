@@ -12,7 +12,14 @@ export const OCR_LANGS: { id: OcrLang; label: string }[] = [
 ];
 
 /** 將圖片縮放到適合 OCR 的尺寸並做灰階＋對比強化 */
-export async function prepareImage(src: Blob | HTMLCanvasElement): Promise<HTMLCanvasElement> {
+export interface PrepOptions {
+  /** stretch = 只做對比拉伸；adaptive = 局部二值化（去除灰底、陰影、光線不均） */
+  mode?: 'stretch' | 'adaptive';
+  maxSide?: number;
+}
+
+export async function prepareImage(src: Blob | HTMLCanvasElement, opts: PrepOptions = {}): Promise<HTMLCanvasElement> {
+  const { mode = 'adaptive', maxSide = 3000 } = opts;
   let source: CanvasImageSource;
   let w: number;
   let h: number;
@@ -27,7 +34,7 @@ export async function prepareImage(src: Blob | HTMLCanvasElement): Promise<HTMLC
     h = bmp.height;
   }
   const longSide = Math.max(w, h);
-  const scale = longSide > 3000 ? 3000 / longSide : longSide < 1400 ? 1400 / longSide : 1;
+  const scale = longSide > maxSide ? maxSide / longSide : longSide < 1400 ? 1400 / longSide : 1;
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
@@ -52,8 +59,51 @@ export async function prepareImage(src: Blob | HTMLCanvasElement): Promise<HTMLC
     const v = Math.max(0, Math.min(255, ((d[i] - lo) * 255) / range));
     d[i] = d[i + 1] = d[i + 2] = v;
   }
+  if (mode === 'adaptive') adaptiveThreshold(d, canvas.width, canvas.height);
   ctx.putImageData(img, 0, 0);
   return canvas;
+}
+
+/**
+ * Sauvola 局部二值化：以每個像素周圍視窗的平均與標準差決定門檻，
+ * 能把灰色底紋、陰影、手機拍照的光線不均都變成乾淨的白底黑字。
+ */
+function adaptiveThreshold(d: Uint8ClampedArray, w: number, h: number): void {
+  const n = w * h;
+  const W = w + 1;
+  const sum = new Float64Array(W * (h + 1));
+  const sq = new Float64Array(W * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let rs = 0;
+    let rq = 0;
+    for (let x = 0; x < w; x++) {
+      const v = d[(y * w + x) * 4];
+      rs += v;
+      rq += v * v;
+      sum[(y + 1) * W + x + 1] = sum[y * W + x + 1] + rs;
+      sq[(y + 1) * W + x + 1] = sq[y * W + x + 1] + rq;
+    }
+  }
+  const r = Math.max(8, Math.round(Math.max(w, h) / 60));
+  const k = 0.2;
+  const R = 128;
+  const out = new Uint8Array(n);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(w, x + r + 1);
+      const cnt = (y1 - y0) * (x1 - x0);
+      const s = sum[y1 * W + x1] - sum[y0 * W + x1] - sum[y1 * W + x0] + sum[y0 * W + x0];
+      const q = sq[y1 * W + x1] - sq[y0 * W + x1] - sq[y1 * W + x0] + sq[y0 * W + x0];
+      const mean = s / cnt;
+      const std = Math.sqrt(Math.max(0, q / cnt - mean * mean));
+      const t = mean * (1 + k * (std / R - 1));
+      out[y * w + x] = d[(y * w + x) * 4] > t ? 255 : 0;
+    }
+  }
+  for (let i = 0; i < n; i++) d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = out[i];
 }
 
 type TWorker = Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>;

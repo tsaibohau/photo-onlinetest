@@ -140,3 +140,38 @@ describe('normalize spacing', () => {
     expect(normalizeText('國二自然 期中練習')).toBe('國二自然 期中練習');
   });
 });
+
+import { readFileSync } from 'node:fs';
+import { repairOcrQuestionStarts } from '../src/core/text-parser';
+describe('real OCR output (phone photo of an earth-science quiz)', () => {
+  const ocr = readFileSync(new URL('./fixtures/ocr-earth-science.txt', import.meta.url), 'utf8');
+  const r = parseQuestionsFromText(ocr);
+  it('recovers all 10 question numbers from mangled answer brackets', () => {
+    expect(r.questions).toHaveLength(10);
+    expect(r.questions[0].stem).toContain('構造學說');
+    expect(r.questions[6].stem).toContain('密度');
+    expect(r.questions[7].stem).toContain('褶');
+  });
+  it('recovers options despite OCR confusions', () => {
+    const q3 = r.questions[2];
+    expect(q3.options.length).toBe(5);
+    expect(q3.options[1]).toContain('喜馬拉雅');
+    expect(q3.options[3]).toContain('智利');
+    const q7 = r.questions[6];
+    expect(q7.options[0]).toContain('地函');
+    expect(q7.options.length).toBeGreaterThanOrEqual(4);
+  });
+  it('repairs bracket junk', () => {
+    expect(repairOcrQuestionStarts('1. a\nC02 地震\nCD) 3 右圖\nC0 4 地球\n(  )& 通常')).toBe(
+      '1. a\n( ) 2. 地震\n( ) 3. 右圖\n( ) 4. 地球\n(  )& 通常',
+    );
+    expect(repairOcrQuestionStarts('7. a\n(  )& 通常')).toBe('7. a\n( ) 8. 通常');
+  });
+});
+
+describe('lost option A guard', () => {
+  it('does not steal the stem as option A', () => {
+    const r = parseQuestionsFromText('1. 何者對？ (B) 甲 (C) 乙');
+    expect(r.questions[0].stem).toBe('何者對？ (B) 甲 (C) 乙');
+  });
+});

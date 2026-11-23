@@ -32,7 +32,7 @@ export function normalizeText(s: string): string {
     .map((line) => {
       const gaps = line.match(gap)?.length ?? 0;
       const chars = line.match(cjkChar)?.length ?? 0;
-      return gaps >= 2 && gaps >= chars * 0.4 ? line.replace(gap, '$1') : line;
+      return gaps >= 2 && gaps >= chars * 0.25 ? line.replace(gap, '$1') : line;
     })
     .join('\n');
   return t
@@ -81,8 +81,22 @@ interface Marker {
 }
 
 /** 找出一行中的選項標記，必須依序（從 expectStart 開始連號）才算數 */
-function findOptionMarkers(line: string, expectStart: number, numericMode: boolean | undefined): Marker[] {
-  const cands: Marker[] = [];
+interface Candidate extends Marker {
+  /** 由 OCR 常見誤認推測而來（例如 (8)→(B)、COD)→(D)），只在剛好是下一個預期選項時才採用 */
+  fuzzy: boolean;
+}
+
+// OCR 常見誤認：(8)=B、(4=A、COD)/(0)=D、右括號遺失「(CP 波」=(C)P
+const FUZZY_RE = /\(\s*8\s*\)|\(4(?=\s)|(?:\bCO|\()[D0O]\)|\(([A-E])(?=[A-Za-z一-鿿])/g;
+
+/** 找出一行中的選項標記，必須依序（從 expectStart 開始連號）才算數 */
+function findOptionMarkers(
+  line: string,
+  expectStart: number,
+  numericMode: boolean | undefined,
+  allowLostA = false,
+): Marker[] {
+  const cands: Candidate[] = [];
   const re = /\(\s*([A-Ea-e]|[1-6])\s*\)|(?<![A-Za-z0-9])([A-E])\s*[.、)](?!\d)|([①②③④⑤⑥])/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(line))) {
@@ -98,19 +112,88 @@ function findOptionMarkers(line: string, expectStart: number, numericMode: boole
       idx = CIRCLED.indexOf(m[3]);
       numeric = true;
     }
-    cands.push({ pos: m.index, end: m.index + m[0].length, idx, numeric });
+    cands.push({ pos: m.index, end: m.index + m[0].length, idx, numeric, fuzzy: false });
+  }
+  if (numericMode !== true) {
+    while ((m = FUZZY_RE.exec(line))) {
+      const pos = m.index;
+      if (cands.some((c) => pos < c.end && pos + m![0].length > c.pos)) continue;
+      const t = m[0];
+      const idx = m[1] ? m[1].charCodeAt(0) - 65 : t.includes('8') ? 1 : t.startsWith('(4') ? 0 : 3;
+      cands.push({ pos, end: pos + t.length, idx, numeric: false, fuzzy: true });
+    }
+    cands.sort((a, b) => a.pos - b.pos);
   }
   const out: Marker[] = [];
   let want = expectStart;
   let mode = numericMode;
   for (const c of cands) {
-    if (c.idx !== want) continue;
     if (mode !== undefined && c.numeric !== mode) continue;
-    mode = c.numeric;
-    out.push(c);
-    want++;
+    if (c.idx === want) {
+      mode = c.numeric;
+      out.push(c);
+      want++;
+    } else if (
+      allowLostA &&
+      want === 0 &&
+      out.length === 0 &&
+      c.idx === 1 &&
+      !c.numeric &&
+      numericMode !== true &&
+      line.slice(0, c.pos).trim().length > 0 &&
+      line.slice(0, c.pos).trim().length <= 12
+    ) {
+      // 行首的 (A) 被 OCR 吃掉（如「AER (8) 喜馬拉雅山」）：把 (B) 前面的短文字當作選項 A
+      mode = false;
+      out.push({ pos: 0, end: 0, idx: 0, numeric: false });
+      out.push(c);
+      want = 2;
+    } else if (!c.fuzzy && !c.numeric && mode === false && c.idx === want + 1 && out.length > 0) {
+      // 中間漏認一個選項（例如 (C) 被 OCR 吃掉）：補一個空白選項，讓使用者在編輯器補上
+      out.push({ pos: c.pos, end: c.pos, idx: want, numeric: false });
+      out.push(c);
+      want += 2;
+    }
   }
   return out;
+}
+
+const DIGITISH: Record<string, string> = { '&': '8', S: '5', s: '5', l: '1', I: '1', '|': '1', O: '0', o: '0', Z: '2', g: '9' };
+// 「( )」作答括號被 OCR 認錯的各種樣子：CL、C02、CD) 5、C0 7、C6、(9、( )&、(” ) 10.
+const JUNK_NUM_RE = /^(?:\(\s*["”“'’`.,:;_]*\s*\)|\(\s*(?=[\d&])|C[0oOD]?\)?(?=\s*[\d&])|CD\)|C[0oO]D\))\s*([\d&SlI|OoZg]?\d|[\d&])\s*[.、,:)]?\s*(.*)$/;
+const JUNK_NONUM_RE = /^(?:\(\s*["”“'’`]*\s*\)|C[LlIJ])\s+(?=[一-鿿])(.*)$/;
+
+/** 修復 OCR 把題號前作答括號認錯的行，改寫成標準的「N. 題目」 */
+export function repairOcrQuestionStarts(text: string): string {
+  let last = 0;
+  return text
+    .split('\n')
+    .map((line) => {
+      const std = line.match(/^(?:\(\s*[A-Ea-eOX]{0,5}\s*\)\s*)?(\d{1,3})\s*[.、]/);
+      if (std) {
+        const n = Number(std[1]);
+        if (last === 0 || n === last + 1 || (n > last && n - last <= 3)) last = n;
+        return line;
+      }
+      // (1)(2)… 是數字選項，不是題號
+      const j = /^\(\s*\d{1,2}\s*\)/.test(line) ? null : line.match(JUNK_NUM_RE);
+      if (j) {
+        const n = Number([...j[1]].map((c) => DIGITISH[c] ?? c).join(''));
+        const strict = /^C/.test(line);
+        if (n === last + 1 || (!strict && n > last && n - last <= 2)) {
+          last = n;
+          return `( ) ${n}. ${j[2]}`;
+        }
+        return line;
+      }
+      const k = line.match(JUNK_NONUM_RE);
+      if (k) {
+        last += 1;
+        return `( ) ${last}. ${k[1]}`;
+      }
+      return line;
+    })
+    .join('\n');
 }
 
 function lettersToIdx(raw: string, numeric: boolean): number[] {
@@ -123,7 +206,7 @@ function lettersToIdx(raw: string, numeric: boolean): number[] {
 }
 
 export function parseQuestionsFromText(input: string): ParseResult {
-  const text = normalizeText(input);
+  const text = repairOcrQuestionStarts(normalizeText(input));
   const lines = text.split('\n');
   const warnings: string[] = [];
   const drafts: Draft[] = [];
@@ -173,7 +256,7 @@ export function parseQuestionsFromText(input: string): ParseResult {
     const qNo = qm ? Number(qm[2]) : NaN;
     // 防止選項或內文中的數字被誤判成新題：題號需與預期相符或相近
     // 有作答括號前綴時，題號後必須是標點（避免「(A) 2 (B) 3」被當成第 2 題）
-    const prefixNeedsPunct = qm && qm[1] !== undefined && !/[.、:)]/.test(qm[3]);
+    const prefixNeedsPunct = qm && !!qm[1] && !/[.、:)]/.test(qm[3]);
     const plausible = qm && !looksLikeNumOption && !prefixNeedsPunct && (qNo === expectedNo || (qNo > 0 && Math.abs(qNo - expectedNo) <= 3) || !cur);
     if (qm && plausible && !(cur && lastWasOption && qNo !== expectedNo)) {
       cur = {
@@ -212,7 +295,12 @@ export function parseQuestionsFromText(input: string): ParseResult {
       }
     }
 
-    const markers = findOptionMarkers(line, cur.options.length, cur.options.length ? cur.numericOptions : undefined);
+    const markers = findOptionMarkers(
+      line,
+      cur.options.length,
+      cur.options.length ? cur.numericOptions : undefined,
+      cur.stem.trim().length > 0,
+    );
     if (markers.length === 0) {
       if (lastWasOption && cur.options.length) cur.options[cur.options.length - 1] += line;
       else appendStem(cur, line);
@@ -233,7 +321,7 @@ export function parseQuestionsFromText(input: string): ParseResult {
 
   const questions: Question[] = drafts.map((d) => {
     const ansRaw = d.answerRaw ?? keyMap.get(d.no);
-    const opts = d.options.map((o) => o.trim());
+    const opts = d.options.map((o) => o.replace(/^[\s_|]+|[\s_|]+$/g, ''));
     let type: QuestionType;
     let options: string[] = opts;
     let answer: number[] | undefined;
