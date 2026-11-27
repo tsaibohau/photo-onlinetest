@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhotoPath — 一張照片，就是一份室內導航</title>
+  <meta name="description" content="把活動導覽圖拍下來，變成可以導航的 .phop 檔案。不用 GPS、不用裝設備。">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // Hide the loading splash once everything (fonts, libraries) has loaded; never longer than 8 s.
+    (function () {
+      var hide = function () { var s = document.getElementById('splash'); if (s) s.classList.add('done'); };
+      window.addEventListener('load', function () { setTimeout(hide, 250); });
+      setTimeout(hide, 8000);
+    })();
+  </script>
+</head>
+<body>
+  <div id="splash" class="splash" aria-hidden="true">
+    <div class="splash-inner">
+      <svg viewBox="0 0 100 100">
+        <defs><linearGradient id="splashGrad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs>
+        <g class="grid"><rect x="8" y="8" width="34" height="30" rx="5"/><rect x="62" y="30" width="30" height="40" rx="5"/><rect x="8" y="58" width="34" height="34" rx="5"/></g>
+        <path class="route" pathLength="260" d="M52 92 V50 H52 V20 H85"/>
+        <circle class="start" cx="52" cy="92" r="6"/>
+        <circle class="dot" cx="85" cy="20" r="7"/>
+      </svg>
+      <div class="splash-name">PhotoPath</div>
+      <div class="splash-sub">載入中…</div>
+    </div>
+  </div>
+  <header class="top">
+    <a class="brand" href="./">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10h8V4h8"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/></svg></span>
+      PhotoPath
+    </a>
+    <span class="tag">Beta · 全部免費</span>
+    <nav><a href="create.html">建立</a><a href="view.html">開啟</a><button id="tour-btn" class="tour-btn" type="button" title="重新播放這一頁的導覽">❔ 導覽</button></nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <span class="eyebrow">不用 GPS · 不用裝設備</span>
+        <h1>一張照片，<br><span class="grad">就是一份室內導航</span></h1>
+        <p class="lead">把展場、市集、校園的導覽圖拍下來，PhotoPath 會自動找出走道和地點，變成可以帶著走的 <code>.phop</code> 檔案。在地下室、展覽館這些 GPS 收不到的地方也能用。</p>
+        <div class="row">
+          <a class="btn primary lg" href="create.html">📷 拍一張開始</a>
+          <a class="btn lg" href="view.html">開啟 .phop 檔案</a>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <svg viewBox="0 0 400 280">
+          <rect x="0" y="0" width="400" height="280" fill="#fff"/>
+          <g fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2">
+            <rect x="30" y="30" width="90" height="70" rx="6"/><rect x="155" y="30" width="90" height="70" rx="6"/><rect x="280" y="30" width="90" height="70" rx="6"/>
+            <rect x="30" y="160" width="90" height="70" rx="6"/><rect x="155" y="160" width="90" height="70" rx="6"/><rect x="280" y="160" width="90" height="70" rx="6"/>
+          </g>
+          <g fill="#94a3b8" font-size="13" font-family="sans-serif" text-anchor="middle">
+            <text x="75" y="70">A1</text><text x="200" y="70">A2</text><text x="325" y="70">A3</text>
+            <text x="75" y="200">B1</text><text x="200" y="200">服務台</text><text x="325" y="200">B3</text>
+          </g>
+          <path d="M138 262 V130 H262 V130 H262 V20" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M138 262 V130 H262 V20" fill="none" stroke="#4f46e5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 0"/>
+          <circle cx="138" cy="262" r="10" fill="#ea580c" stroke="#fff" stroke-width="3"/>
+          <text x="138" y="266" fill="#fff" font-size="11" font-weight="700" text-anchor="middle" font-family="sans-serif">1</text>
+          <circle cx="262" cy="130" r="14" fill="#4f46e5" opacity=".18"/>
+          <circle cx="262" cy="130" r="7" fill="#4f46e5" stroke="#fff" stroke-width="3"/>
+        </svg>
+        <div class="chip-float" style="left:-10px; bottom:30px">📍 你在「入口」附近</div>
+        <div class="chip-float" style="right:-8px; top:24px">↑ 直走，路口右轉</div>
+      </div>
+    </section>
+
+    <div class="grid3">
+      <div class="card feature">
+        <div class="ico">🔍</div>
+        <h2>自動辨識</h2>
+        <p class="muted">文字辨識（OCR）讀出攤位、出入口、洗手間；顏色分析找出可以走的路。辨識錯了可以取消勾選、自己補畫，不用一直重拍。</p>
+      </div>
+      <div class="card feature">
+        <div class="ico">🧭</div>
+        <h2>只走上下左右</h2>
+        <p class="muted">每條走道都是一條方程式，彎路會變成直角階梯，只沿上、下、左、右移動，累積誤差小，經過錨點就歸零。</p>
+      </div>
+      <div class="card feature">
+        <div class="ico">🔒</div>
+        <h2>照片不會上傳</h2>
+        <p class="muted">辨識、打包全部在你的手機或電腦上完成。Beta 期間，免費版檔案也能傳到其他裝置開啟。</p>
+      </div>
+    </div>
+
+    <h2 class="section-title">怎麼用？</h2>
+    <div class="how">
+      <div class="card"><h2>拍下導覽圖</h2><p class="muted">正對地圖、整張入鏡、避開反光。也可以直接選手機裡的圖片。</p></div>
+      <div class="card"><h2>確認與修正</h2><p class="muted">地圖上的編號對應下方清單，名稱辨識錯了可以直接改。</p></div>
+      <div class="card"><h2>選起點，開始走</h2><p class="muted">打開檔案，選你附近的定位點並面向地圖上方，就能開始導航。</p></div>
+    </div>
+
+    <!-- 走一圈建圖已凍結（企劃書 v0.2 §8），2026-11-19 從首頁隱藏；survey.html 網址還在
+    <div class="card" style="margin-top:16px; display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+      <div style="flex:1; min-width:240px">
+        <h2 style="margin-bottom:4px">沒有樓層圖？走一圈就有</h2>
+        <p class="muted" style="margin:0">拿著手機沿著牆走，標記門、樓梯和地標，系統會把室內畫成地圖（可以多層）。</p>
+      </div>
+      <a class="btn primary" href="survey.html">🚶 走一圈畫室內地圖</a>
+    </div>
+    -->
+
+    <div class="card" style="margin-top:16px; display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+      <div style="flex:1; min-width:240px">
+        <h2 style="margin-bottom:4px">自己畫地圖</h2>
+        <p class="muted" style="margin:0">示意圖太花或比例不準？用公尺畫出乾淨的場地地圖（可以拿照片當底圖描），名稱和比例都由你決定。</p>
+      </div>
+      <a class="btn" href="editor.html">✏️ 地圖編輯器</a>
+    </div>
+  </main>
+  <footer>PhotoPath · 所有處理都在你的裝置上進行，照片不會上傳</footer>
+  <script type="module" src="js/home.js"></script>
+</body>
+</html>

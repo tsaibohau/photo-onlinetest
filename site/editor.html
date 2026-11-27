@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>地圖編輯器 — PhotoPath</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10h8V4h8"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/></svg></span>
+      PhotoPath
+    </a>
+    <span class="tag">地圖編輯器</span>
+    <nav><a href="create.html">建立</a><a href="view.html">開啟</a><button id="tour-btn" class="tour-btn" type="button" title="重新播放這一頁的導覽">❔ 導覽</button></nav>
+  </header>
+
+  <main>
+    <!-- step 1: where does the venue come from -->
+    <section id="s1" class="wiz-page">
+      <p class="wiz-count">第 1／7 步</p>
+      <h1>場地從哪裡來？</h1>
+      <p class="muted">選一種方式開始。接下來會一步一步帶你：設定範圍 → 畫路和建築 → 畫室內 → 放攤位 → 放定位點 → 輸出。畫圖的步驟會進入全螢幕。</p>
+
+      <div id="resume" class="notice ok hidden wiz-resume">
+        <span>有上次的草稿：<b id="resume-info"></b></span>
+        <button id="btn-resume" class="btn primary sm">繼續編輯</button>
+      </div>
+
+      <div id="src-choices" class="src-choices">
+        <a class="src-card" href="create.html">
+          <span class="ico">⚡</span><b>拍導覽圖，自動完成</b>
+          <small>最快：拍下現場的導覽圖或樓層簡介圖，自動找出走道和地點，確認後直接下載。</small>
+        </a>
+        <button class="src-card" data-mode="osm">
+          <span class="ico">🗺️</span><b>用地圖找地點</b>
+          <small>搜尋 OpenStreetMap（例如：嘉義公園），框出活動範圍，尺寸自動算好，地圖鋪在底下照著描。</small>
+        </button>
+        <button class="src-card" data-mode="photo">
+          <span class="ico">📷</span><b>用導覽圖照片描</b>
+          <small>選一張導覽圖照片，點兩個位置、輸入實際距離，就能照著畫。</small>
+        </button>
+        <button class="src-card" data-mode="size">
+          <span class="ico">📐</span><b>直接輸入尺寸</b>
+          <small>知道場地的長寬（公尺）就直接輸入，在空白網格上畫。</small>
+        </button>
+      </div>
+
+      <details class="wiz-more">
+        <summary>其他選項</summary>
+        <div class="row">
+          <button id="btn-sample" class="btn sm">載入範例</button>
+          <label class="btn sm">匯入草稿<input id="draft-file" type="file" accept=".json,application/json" hidden></label>
+          <button id="btn-new" class="btn sm ghost">清空重來</button>
+        </div>
+      </details>
+    </section>
+
+    <!-- step 6: check & export -->
+    <section id="s6" class="wiz-page hidden">
+      <p class="wiz-count">第 7／7 步</p>
+      <h1>檢查與輸出</h1>
+      <div class="wiz-back row">
+        <span class="muted">回去修改：</span>
+        <button class="btn sm" data-go="2">範圍</button>
+        <button class="btn sm" data-go="3">路</button>
+        <button class="btn sm" data-go="7">室內</button>
+        <button class="btn sm" data-go="4">攤位</button>
+        <button class="btn sm" data-go="5">定位點</button>
+        <button class="btn sm ghost btn-restart">⟲ 從頭開始</button>
+      </div>
+
+      <div class="card">
+        <div class="ed-fields">
+          <label>場地名稱<input id="v-title" type="text" placeholder="例如：春季市集"></label>
+        </div>
+        <p id="v-size" class="muted" style="margin:8px 0 0"></p>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>檢查</h2>
+          <ul id="checks" class="checks"></ul>
+        </div>
+        <div class="card">
+          <h2>輸出 .phop</h2>
+          <div class="row">
+            <button id="btn-download" class="btn primary">⬇ 下載 .phop</button>
+            <button id="btn-open" class="btn">在這台裝置開啟</button>
+          </div>
+          <p class="muted" style="margin-bottom:0">地圖影像由系統依你畫的內容產生（不含底圖），比例為實際公尺。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>地圖樣式</h2>
+        <div class="seg map-style" id="map-style">
+          <button data-style="osm">🗺️ OSM 原圖</button>
+          <button data-style="stone">🪨 石碑</button>
+          <button data-style="plain">📄 簡潔</button>
+        </div>
+        <canvas id="style-preview" class="style-preview"></canvas>
+        <p class="muted" style="margin:6px 0 0">輸出的地圖影像會長這樣（編輯時的畫面不變）。</p>
+      </div>
+
+      <div class="card">
+        <h3>定位點<span id="anchor-count" class="count">0</span></h3>
+        <ol id="anchor-items" class="place-list cols"></ol>
+        <p id="anchor-empty" class="empty">還沒有定位點。</p>
+        <h3>攤位／房間<span id="block-count" class="count">0</span></h3>
+        <ul id="block-items" class="place-list cols"></ul>
+        <p id="block-empty" class="empty">沒有攤位（可以不放）。</p>
+        <p class="muted" style="margin:0">名稱打錯可以直接在這裡改。</p>
+      </div>
+
+      <details class="wiz-more">
+        <summary>其他選項</summary>
+        <div class="row"><button id="btn-save-draft" class="btn sm">匯出草稿（.json）</button></div>
+      </details>
+    </section>
+  </main>
+
+  <!-- steps 2–5: full-screen workspace -->
+  <div id="full" class="wiz-full hidden">
+    <div class="wiz-top">
+      <button id="w-prev" class="btn sm">← 上一步</button>
+      <div class="wiz-title"><small id="w-step"></small><b id="w-title"></b></div>
+      <button id="w-next" class="btn primary sm">下一步 →</button>
+    </div>
+    <div id="w-hint" class="wiz-hint">
+      <span id="w-hint-text"></span>
+      <button id="w-hint-x" class="hint-x" title="收起提示">✕</button>
+    </div>
+
+    <div id="w-stage" class="wiz-stage">
+      <canvas id="ed-map"></canvas>
+      <div id="walk-seg" class="stage-seg hidden">
+        <button data-walk="open">可以自由走動</button>
+        <button data-walk="roads">只能沿著路走</button>
+      </div>
+      <button id="w-hint-show" class="stage-btn stage-help hidden" title="顯示提示">？提示</button>
+      <button id="btn-fit" class="stage-btn stage-fit" title="顯示整個場地">⤢ 全圖</button>
+      <div id="ed-status" class="stage-status"></div>
+      <div id="bg-attr" class="stage-attr hidden">底圖 © OpenStreetMap contributors</div>
+
+      <!-- tap something on the map: what you can do with it -->
+      <div id="sel-bar" class="sel-bar hidden"></div>
+      <div id="more-menu" class="more-menu hidden">
+        <button id="tool-wand" class="tbtn tool" data-tool="wand" data-steps="3" data-walk="open"><i>🪄</i>魔術棒</button>
+        <button id="btn-bg" class="tbtn" data-steps="3 4 5 7" data-needs-bg="1"><i>🖼</i><span id="bg-label">底圖</span></button>
+        <button class="tbtn btn-restart" data-steps="3 4 5 7"><i>⟲</i>從頭開始</button>
+        <select id="obs-kind" hidden></select>
+        <select id="block-kind" hidden></select>
+      </div>
+
+      <div id="pane-osm" class="wiz-pane hidden">
+        <div class="row">
+          <input id="osm-q" type="text" placeholder="地點名稱，例如：嘉義公園" enterkeyhint="search">
+          <button id="osm-search" class="btn primary sm">🔎 搜尋</button>
+        </div>
+        <p id="osm-current" class="muted hidden" style="margin:8px 0 0"></p>
+        <ul id="osm-results" class="osm-results hidden"></ul>
+        <div id="osm-pick" class="osm-pick hidden">
+          <p id="osm-info" class="osm-info"></p>
+          <div id="osm-canvas-wrap" class="osm-canvas-wrap"><canvas id="osm-map"></canvas></div>
+          <p class="osm-attr">地圖 © OpenStreetMap contributors</p>
+        </div>
+      </div>
+
+      <div id="pane-size" class="wiz-pane hidden">
+        <div class="size-form">
+          <label>寬（公尺）<input id="v-width" type="number" min="5" max="1000" step="1" inputmode="numeric"></label>
+          <span class="size-x">×</span>
+          <label>長（公尺）<input id="v-height" type="number" min="5" max="1000" step="1" inputmode="numeric"></label>
+        </div>
+        <p class="muted" style="text-align:center">5–1000 公尺。之後畫的路和攤位都以公尺為單位。</p>
+      </div>
+    </div>
+
+    <div id="auto-sheet" class="wiz-sheet hidden">
+      <h3 id="auto-title">自動辨識</h3>
+      <p id="auto-status" class="muted"></p>
+      <ul id="auto-list" class="auto-list"></ul>
+      <div class="row">
+        <button id="auto-apply" class="btn primary sm hidden">保留勾選的</button>
+        <button id="auto-close" class="btn sm">全部不要</button>
+      </div>
+      <p id="auto-attr" class="osm-attr"></p>
+    </div>
+
+    <div id="w-tools" class="wiz-tools">
+      <label class="tbtn" data-steps="2" data-mode="photo"><i>📷</i>選照片<input id="bg-file" type="file" accept="image/*" hidden></label>
+      <button id="osm-full" class="tbtn" data-steps="2" data-mode="osm"><i>⬚</i>框整個地點</button>
+      <button class="tbtn btn-restart" data-steps="2"><i>⟲</i>從頭開始</button>
+
+      <button class="tbtn tool" data-tool="corridor" data-steps="3" data-walk="roads"><i>➕</i>直路</button>
+      <button class="tbtn tool" data-tool="curve" data-steps="3" data-walk="roads"><i>〰</i>彎路</button>
+      <button class="tbtn tool" data-tool="area" data-steps="3" data-walk="open"><i>✏️</i>圈範圍</button>
+      <button class="tbtn tool" data-tool="curve" data-steps="3" data-walk="open"><i>〰</i>畫路</button>
+      <button id="btn-3d" class="tbtn" data-steps="7" data-in="0"><i>🧊</i><span id="label-3d">立體圖</span></button>
+      <label class="tbtn tsel" data-steps="7" data-in="1"><i>🏢</i><select id="floor-sel" title="樓層"></select></label>
+      <button class="tbtn tool" data-tool="room" data-steps="7" data-in="1"><i>▭</i>房間</button>
+      <button class="tbtn tool" data-tool="iwall" data-steps="7" data-in="1"><i>▏</i>牆</button>
+      <button id="btn-walk" class="tbtn" data-steps="7" data-in="1"><i>🚶</i>走一圈</button>
+      <button class="tbtn tool" data-tool="block" data-steps="4"><i>▭</i>畫攤位</button>
+      <button class="tbtn tool" data-tool="anchor" data-steps="5"><i>📍</i>定位點</button>
+      <button id="btn-auto" class="tbtn" data-steps="3 4 5"><i>✨</i>自動辨識</button>
+      <button id="btn-undo" class="tbtn" data-steps="3 4 5 7"><i>↶</i>復原</button>
+      <button id="btn-more" class="tbtn" data-steps="3 4 5"><i>⋯</i>更多</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="js/editor.js"></script>
+</body>
+</html>

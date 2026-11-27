@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>走一圈畫室內地圖 — PhotoPath</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10h8V4h8"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/></svg></span>
+      PhotoPath
+    </a>
+    <nav><a href="create.html">建立</a><a href="view.html">開啟</a></nav>
+  </header>
+  <main>
+    <!-- 1. setup -->
+    <section id="sv-setup">
+      <h1>走一圈畫室內地圖</h1>
+      <p class="lead">沒有樓層圖也沒關係：拿著手機沿著牆走，系統會把你走過的路畫成牆、走道和門。</p>
+      <div id="sv-target" class="notice ok hidden">
+        🏢 正在幫編輯器裡的「<b id="sv-target-name"></b>」畫 <b id="sv-target-floor"></b> 的室內：<b>站在門口、面向建築裡面</b>，按「開始錄製」後直直走進去，再沿著牆走一圈。走完會自動放回編輯器的這棟建築。
+        <div class="row" style="margin-top:8px"><button id="sv-target-cancel" class="btn sm">不畫了，回編輯器</button></div>
+      </div>
+      <div id="sv-resume" class="notice ok hidden">
+        有一份還沒完成的錄製（<b id="sv-resume-info"></b>）。
+        <div class="row" style="margin-top:8px">
+          <button id="sv-resume-go" class="btn primary sm">▶ 繼續錄製</button>
+          <button id="sv-resume-review" class="btn sm">看地圖</button>
+          <button id="sv-resume-drop" class="btn sm">刪掉，重新開始</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>開始前</h2>
+        <div class="sv-form">
+          <label>建築名稱 <input id="sv-name" type="text" value="我的建築" maxlength="40"></label>
+          <label>你的身高（公分） <input id="sv-height" type="number" inputmode="numeric" min="120" max="210" value="165"></label>
+          <label>每步長度（公尺） <input id="sv-step" type="number" inputmode="decimal" step="0.01" min="0.3" max="1.1" value="0.68"></label>
+          <label>從哪一層開始 <input id="sv-floor" type="text" value="1F" maxlength="8"></label>
+          <label>房間大約多深（公尺） <input id="sv-depth" type="number" inputmode="decimal" step="0.5" min="2" max="30" value="6"></label>
+        </div>
+        <ol class="sv-howto">
+          <li><b>手機平拿在胸前</b>，螢幕朝上、手機頂端朝你走的方向。走路時盡量不要轉動手機。</li>
+          <li>站在一面牆旁邊（大約半步遠），按「開始錄製」，iPhone 會問能不能使用「動作與方向」，請按<b>允許</b>。</li>
+          <li>按「牆在左邊」或「牆在右邊」，然後<b>沿著牆走</b>；牆走完了按「這面牆結束」。</li>
+          <li><b>走道兩邊一樣寬時更快</b>：先按「📏 量走道寬」，從一邊的牆直直走到對面的牆再按一次；之後按「走在走道中間」，一趟就畫出兩面牆。</li>
+          <li>經過門口按 🚪，可以輸入房間名稱（或拍門牌自動辨識），<b>不用走進房間</b>，房間會自動畫在牆後面。到樓梯、電梯按 🪜 🛗，看到明顯的東西按 📍 取名字（之後可以當校正點）。</li>
+          <li>走回<b>已經標過的地方</b>時按 🔁，系統會修掉一路累積的誤差。繞成一圈的效果最好。</li>
+          <li>閃避路人不用暫停：短距離繞開又回到原方向，系統會自動拉回直線。</li>
+          <li>換樓層按「換樓層」；走樓梯時系統也會偵測到轉折平台並問你是不是在上下樓。每一層會各自輸出一個 .phop。</li>
+          <li>走廊上的<b>避難逃生圖</b>可以拍下來，在最後的檢查畫面疊在地圖上，到編輯器描房間。</li>
+        </ol>
+        <div class="row">
+          <button id="sv-start" class="btn primary lg">▶ 開始錄製</button>
+        </div>
+        <p class="muted" style="margin-bottom:0">在電腦上可以用方向鍵模擬：↑ 走一步、← → 轉 90°（按住 Shift 轉 15°）。</p>
+      </div>
+    </section>
+
+    <!-- 2. recording -->
+    <section id="sv-rec" class="hidden">
+      <div id="sv-status" class="notice warn sv-status">
+        <span id="sv-status-text">準備中…</span>
+      </div>
+      <div class="hud sv-hud">
+        <span class="chip">樓層 <b id="sv-hud-floor">1F</b></span>
+        <span class="chip">步數 <b id="sv-hud-steps">0</b></span>
+        <span class="chip">約 <b id="sv-hud-dist">0</b> m</span>
+        <span class="chip">方向 <b id="sv-hud-dir">–</b></span>
+        <span class="chip">走道寬 <b id="sv-hud-width">–</b></span>
+      </div>
+      <div id="sv-stairs-ask" class="notice warn sv-banner hidden">
+        <b>🪜 看起來在走樓梯？</b>（剛剛走了一段、在平台轉身往回走）
+        <div class="row"><button id="sv-stairs-yes" class="btn primary sm">是，換樓層</button><button id="sv-stairs-no" class="btn sm">不是</button></div>
+      </div>
+      <div id="sv-onstairs" class="notice ok sv-banner hidden">
+        <b>🪜 在樓梯上</b>：每步改算 <span id="sv-tread"></span> 公尺。到了樓層、離開樓梯間時按下面的按鈕。
+        <div class="row"><button id="sv-stairs-done" class="btn primary sm">✔ 到了</button></div>
+      </div>
+      <div id="sv-measure" class="notice warn sv-banner hidden">
+        <b id="sv-measure-title">📏 量走道寬</b>：<span id="sv-measure-text"></span>
+        <div class="row"><button id="sv-measure-done" class="btn primary sm">✔ 量好了</button><button id="sv-measure-cancel" class="btn sm">取消</button></div>
+      </div>
+      <div class="sv-mapwrap"><canvas id="sv-live"></canvas></div>
+      <div id="sv-wall-off" class="sv-wall sv-wall3">
+        <button id="sv-wall-left" class="btn primary lg">🧱 牆在左邊</button>
+        <button id="sv-wall-mid" class="btn primary lg">🧱 走在走道中間 🧱</button>
+        <button id="sv-wall-right" class="btn primary lg">牆在右邊 🧱</button>
+      </div>
+      <div id="sv-wall-on" class="sv-wall hidden">
+        <button id="sv-wall-stop" class="btn warn lg">■ 這面牆結束</button>
+      </div>
+      <div class="row sv-row sv-measure-row">
+        <button id="sv-measure-width" class="btn soft">📏 量走道寬</button>
+        <button id="sv-measure-depth" class="btn soft">📐 量房間深</button>
+      </div>
+      <div class="sv-marks">
+        <button data-mark="door" class="btn">🚪<span>門</span></button>
+        <button data-mark="stairs" class="btn">🪜<span>樓梯</span></button>
+        <button data-mark="elevator" class="btn">🛗<span>電梯</span></button>
+        <button data-mark="landmark" class="btn">📍<span>地標</span></button>
+        <button id="sv-loop" class="btn">🔁<span>回到標記點</span></button>
+        <button id="sv-undo" class="btn">↶<span>復原</span></button>
+      </div>
+      <div class="row sv-row">
+        <button id="sv-pause" class="btn soft">⏸ 暫停計步</button>
+        <button id="sv-floor-switch" class="btn soft">🔼🔽 換樓層</button>
+        <button id="sv-finish" class="btn primary">✔ 完成，看地圖</button>
+      </div>
+      <!-- door: room name (typed or read off the door plate) and which side the room is on -->
+      <div id="sv-door" class="sv-sheet hidden">
+        <div class="sv-sheet-card">
+          <h2>🚪 門</h2>
+          <label class="sv-door-name">房間名稱（可以不填）
+            <input id="sv-door-name" type="text" maxlength="40" placeholder="例如：301 教室、男廁">
+          </label>
+          <div class="row">
+            <label class="btn sm" for="sv-door-photo">📷 拍門牌</label>
+            <input id="sv-door-photo" type="file" accept="image/*" capture="environment" hidden>
+            <span id="sv-door-ocr" class="muted"></span>
+          </div>
+          <p class="muted" style="margin:10px 0 6px">房間在你的哪一邊？</p>
+          <div class="sv-side">
+            <button data-side="left" class="btn">← 左邊</button>
+            <button data-side="right" class="btn">右邊 →</button>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button id="sv-door-ok" class="btn primary">✔ 標記</button>
+            <button id="sv-door-cancel" class="btn">取消</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. review -->
+    <section id="sv-review" class="hidden">
+      <h1 id="sv-review-title">檢查地圖</h1>
+      <div id="sv-tabs" class="sv-tabs"></div>
+      <div class="card">
+        <div class="sv-mapwrap"><canvas id="sv-out"></canvas></div>
+        <p id="sv-review-info" class="muted"></p>
+        <div id="sv-warn" class="notice warn hidden"></div>
+        <label class="switch"><input id="sv-straight" type="checkbox" checked><span>拉直、轉角對齊成直角</span></label>
+        <label class="switch"><input id="sv-rooms" type="checkbox" checked><span>依門牌推算房間範圍（深 <b id="sv-depth-show">6</b> m）</span></label>
+        <p class="muted">點地圖上的一面牆：可以輸入它的<b>實際長度</b>修正整張圖的比例，或刪掉走錯的牆。</p>
+      </div>
+      <div class="card">
+        <h2>疊上避難逃生圖（選填）</h2>
+        <p class="muted">每層樓走廊通常貼有避難逃生圖。拍下來，對準地圖上兩個定位點，就能疊在地圖上；交給編輯器後可以照著描房間、魔術棒選範圍。</p>
+        <div class="row">
+          <label class="btn" for="sv-evac-file">🗺 選逃生圖照片</label>
+          <input id="sv-evac-file" type="file" accept="image/*" hidden>
+          <button id="sv-evac-opacity" class="btn hidden">疊圖 50%</button>
+          <button id="sv-evac-realign" class="btn hidden">重新對位</button>
+          <button id="sv-evac-remove" class="btn hidden">移除</button>
+        </div>
+        <div id="sv-align" class="hidden">
+          <p id="sv-align-text" class="notice warn" style="margin-top:12px"></p>
+          <label class="sv-door-name">定位點 <select id="sv-align-anchor"></select></label>
+          <div class="sv-mapwrap" style="margin-top:8px"><canvas id="sv-photo"></canvas></div>
+          <div class="row" style="margin-top:8px"><button id="sv-align-cancel" class="btn sm">取消</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>輸出</h2>
+        <div class="row">
+          <button id="sv-to-editor" class="btn primary">✏️ 這層在編輯器開啟，輸出 .phop</button>
+          <button id="sv-export" class="btn">⬇ 匯出錄製資料</button>
+        </div>
+        <p class="muted" style="margin-bottom:0">錄製資料包含感測器原始數據，之後可以拿來改進定位。輸出前也可以在編輯器裡補畫、改名稱。</p>
+      </div>
+      <div class="row">
+        <button id="sv-back" class="btn">← 回去繼續錄</button>
+        <button id="sv-reset" class="btn warn">🗑 全部重來</button>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script type="module" src="js/survey.js"></script>
+</body>
+</html>
