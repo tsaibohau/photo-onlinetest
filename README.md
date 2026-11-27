@@ -2,6 +2,12 @@
 
 拍下現場的導覽圖／樓層圖，變成可以導航的 `.phop` 檔案。不用 GPS、不用布建硬體。
 
+## 文件
+
+- [`PhotoPath_phop企劃書.md`](PhotoPath_phop企劃書.md)：企劃書 v0.2（2026-11-19，目前版本）
+- [`docs/封存/PhotoPath_phop企劃書_v0.1.md`](docs/封存/PhotoPath_phop企劃書_v0.1.md)：舊版 v0.1
+- 變更日誌與 `docs/plans/` 尚未搬入（日誌含真實導覽圖照片，不放公開 repo）。
+
 ## 網站（`site/`）
 
 純靜態網站（無建置步驟），從 Google Drive `我的雲端硬碟/PhotoPath/phop/site` 搬入（雲端最後修改 2026-11-22）。
